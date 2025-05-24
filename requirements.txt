@@ -1,0 +1,30 @@
+# requirements.txt
+
+# Framework principal
+fastapi
+
+# Servidor ASGI (uvicorn con dependencias estándar para mejor rendimiento)
+uvicorn[standard]
+
+# ORM y Base de Datos
+sqlalchemy[asyncio] # Para ORM asíncrono
+aiomysql            # Driver asíncrono para MySQL (usado por SQLAlchemy y directamente)
+alembic             # Para migraciones de base de datos (recomendado para producción)
+
+# Validación de datos y configuración
+pydantic
+pydantic-settings
+
+# Google Gemini SDK
+google-generativeai
+
+# Para cargar variables de entorno desde .env
+python-dotenv
+
+# (Opcional, pero útil para IDs únicos)
+# python-ulid # Si decides usar ULIDs para session_id o IDs de mensaje
+
+# (Opcional, para desarrollo y pruebas)
+# httpx             # Para hacer peticiones HTTP asíncronas (útil para probar endpoints)
+# pytest
+# pytest-asyncio
