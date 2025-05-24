@@ -8,8 +8,14 @@ uvicorn[standard]
 
 # ORM y Base de Datos
 sqlalchemy[asyncio] # Para ORM asíncrono
-aiomysql            # Driver asíncrono para MySQL (usado por SQLAlchemy y directamente)
-alembic             # Para migraciones de base de datos (recomendado para producción)
+
+# Drivers de base de datos asíncronos
+# Si usas PostgreSQL (como tu tool), necesitarás 'asyncpg'
+#asyncpg
+# Si también usas MySQL (como tu comentario original), mantén 'aiomysql'
+aiomysql
+
+alembic # Para migraciones de base de datos (recomendado para producción)
 
 # Validación de datos y configuración
 pydantic
@@ -20,9 +26,19 @@ google-generativeai
 
 # Para cargar variables de entorno desde .env
 python-dotenv
+
+# Para manejo de IDs únicos (si usas UUIDs o ULIDs)
+# Ya que sqlalchemy.Column(String(36)) para UUIDs, no necesitas una lib extra a menos que generes ULIDs.
+# Si quieres ULIDs:
+# python-ulid
+
+# Dependencias para seguridad (cryptography ya estaba, importante para JWTs, etc.)
 cryptography
-# (Opcional, pero útil para IDs únicos)
-# python-ulid # Si decides usar ULIDs para session_id o IDs de mensaje
+
+
+#MCP
+mysql-mcp-server
+
 
 # (Opcional, para desarrollo y pruebas)
 # httpx             # Para hacer peticiones HTTP asíncronas (útil para probar endpoints)

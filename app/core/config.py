@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     EXTERNAL_DB_USER: str = os.getenv("EXTERNAL_DB_USER", "ext_user")
     EXTERNAL_DB_PASSWORD: str = os.getenv("EXTERNAL_DB_PASSWORD", "ext_password")
     EXTERNAL_DB_HOST: str = os.getenv("EXTERNAL_DB_HOST", "db_external")
-    EXTERNAL_DB_PORT: str = os.getenv("EXTERNAL_DB_PORT", "3307") # Puerto diferente ejemplo
+    EXTERNAL_DB_PORT: str = os.getenv("EXTERNAL_DB_PORT", "3306") # Puerto diferente ejemplo
     EXTERNAL_DB_NAME: str = os.getenv("EXTERNAL_DB_NAME", "external_info_db")
     EXTERNAL_DB_URL: str = f"mysql+aiomysql://{EXTERNAL_DB_USER}:{EXTERNAL_DB_PASSWORD}@{EXTERNAL_DB_HOST}:{EXTERNAL_DB_PORT}/{EXTERNAL_DB_NAME}"
 
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Pydantic Settings la leerá de la variable de entorno GEMINI_LLM_MODEL
     # Si no está definida, usará "gemini-1.5-flash" como valor por defecto.
-    GEMINI_LLM_MODEL: str = "gemini-1.5-flash" 
+    GEMINI_LLM_MODEL: str = "gemini-2.0-flash-lite" 
 
     class Config:
         case_sensitive = True
