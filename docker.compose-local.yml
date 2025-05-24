@@ -1,0 +1,79 @@
+# docker-compose.yml
+
+services:
+  # Servicio para tu aplicación FastAPI
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot-api
+    ports:
+      - "8000:8000" # Tu API será accesible en http://localhost:8000
+    env_file:
+      - .env # Carga todas las variables de tu archivo .env
+    depends_on:
+      db_conversation:
+        condition: service_healthy
+      db_external:
+        condition: service_healthy
+    networks:
+      - chatbot_network
+
+  # Servicio para la base de datos de conversaciones (MySQL)
+  db_conversation:
+    image: mysql:8.0 # O la versión de MySQL que prefieras
+    container_name: chatbot-db-conversation
+    environment:
+      # Usamos tus variables de entorno para MySQL
+      MYSQL_ROOT_PASSWORD: ${CONVERSATION_DB_PASSWORD}
+      MYSQL_DATABASE: ${CONVERSATION_DB_NAME}
+      MYSQL_USER: ${CONVERSATION_DB_USER}
+      MYSQL_PASSWORD: ${CONVERSATION_DB_PASSWORD}
+    # Mapea el puerto del HOST (tomado de tu .env) al puerto INTERNO del contenedor (3306)
+    ports:
+      - "${CONVERSATION_DB_PORT}:3306" # <-- ¡Usa tu variable para el puerto del host!
+    volumes:
+      - db_conv_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${CONVERSATION_DB_USER}", "-p${CONVERSATION_DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chatbot_network
+
+  # Servicio para la base de datos externa (MySQL)
+  db_external:
+    image: mysql:8.0 # O la versión de MySQL que prefieras
+    container_name: chatbot-db-external
+    environment:
+      # Usamos tus variables de entorno para MySQL
+      MYSQL_ROOT_PASSWORD: ${EXTERNAL_DB_PASSWORD}
+      MYSQL_DATABASE: ${EXTERNAL_DB_NAME}
+      MYSQL_USER: ${EXTERNAL_DB_USER}
+      MYSQL_PASSWORD: ${EXTERNAL_DB_PASSWORD}
+    # Mapea el puerto del HOST (tomado de tu .env) al puerto INTERNO del contenedor (3306)
+    # ¡ATENCIÓN! Como ambas usan 3388 en tu .env, este puerto en el HOST COLISIONARÁ.
+    # Necesitas que EXTERNAL_DB_PORT sea diferente de CONVERSATION_DB_PORT en tu .env
+    # si quieres que ambas bases de datos estén accesibles desde tu máquina local.
+    ports:
+      - "${EXTERNAL_DB_PORT}:3306" # <-- ¡Usa tu variable para el puerto del host!
+    volumes:
+      - db_ext_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${EXTERNAL_DB_USER}", "-p${EXTERNAL_DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chatbot_network
+
+# Definición de redes
+networks:
+  chatbot_network:
+    driver: bridge
+
+# Definición de volúmenes para persistencia de datos
+volumes:
+  db_conv_data:
+  db_ext_data:

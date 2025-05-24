@@ -1,162 +1,97 @@
 import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold, GenerationConfig
-from app.core.config import settings # Importa la instancia de settings
 from typing import List, Dict, Any, Optional
-from app.tools.base_tool import BaseTool
-import logging
-import asyncio
+from app.tools.base_tool import BaseTool # Asegúrate de que esta importación sea correcta
 import json
-from collections.abc import Iterable
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
-# Configuración global de Gemini (asegúrate de que esto se ejecute solo una vez,
-# por ejemplo, al inicio de la aplicación o en un módulo de inicialización)
-try:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    if not settings.GEMINI_API_KEY:
-        logger.warning("GEMINI_API_KEY no está configurada. Las llamadas a la API de Gemini podrían fallar.")
-except Exception as e:
-    logger.error(f"Error configurando Gemini API: {e}")
-
-DEFAULT_SAFETY_SETTINGS = {
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-}
 
 class GeminiLLMHandler:
-    # El nombre del modelo ahora se toma por defecto de settings.GEMINI_LLM_MODEL
-    def __init__(self, model_name: str = settings.GEMINI_LLM_MODEL, tools: Optional[List[BaseTool]] = None, system_instruction: Optional[str] = None):
+    def __init__(self, model_name: str = "gemini-1.5-flash", tools: Optional[List[BaseTool]] = None, system_instruction: Optional[str] = None):
         self.model_name = model_name
-        self.declared_tools = [tool.get_gemini_tool_declaration() for tool in tools] if tools else None
-        self.tool_registry = {tool.name: tool for tool in tools} if tools else {}
+        self.tools = tools if tools is not None else [] # Asegurarse de que sea una lista vacía si no se pasa nada
+        self.system_instruction = system_instruction
+        
+        # Mapeo de nombres de herramientas a instancias
+        self.tool_map = {tool.name: tool for tool in self.tools}
 
-        generation_config = GenerationConfig()
+        # Configurar el modelo con o sin herramientas
+        if self.tools: # Si hay herramientas, las pasamos
+            self.model = genai.GenerativeModel(
+                model_name=self.model_name,
+                tools=[tool.to_tool_metadata() for tool in self.tools],
+                system_instruction=self.system_instruction
+            )
+        else: # Si no hay herramientas, no pasamos el argumento tools
+            self.model = genai.GenerativeModel(
+                model_name=self.model_name,
+                system_instruction=self.system_instruction
+            )
 
-        self.model = genai.GenerativeModel(
-            model_name=self.model_name, # ¡Aquí se usa la variable de la configuración!
-            safety_settings=DEFAULT_SAFETY_SETTINGS,
-            tools=self.declared_tools,
-            system_instruction=system_instruction,
-            generation_config=generation_config
-        )
-        logger.info(f"Gemini Handler inicializado con modelo: {self.model_name} y tools: {[t.name for t in tools] if tools else 'Ninguna'}")
+        print(f"INFO:app.services.llm_handler:Gemini Handler inicializado con modelo: {self.model_name} y tools: {[t.name for t in self.tools]}")
 
     async def generate_response(self, chat_history: List[Dict[str, Any]], user_prompt: str) -> Dict[str, Any]:
-        current_conversation_history = []
-
-        for entry in chat_history:
-            entry_parts = entry.get("parts")
-            if isinstance(entry_parts, str):
-                parts = [{"text": entry_parts}]
-            # Asegura que entry_parts sea una lista de diccionarios con "text"
-            elif isinstance(entry_parts, Iterable) and all(isinstance(p, dict) and "text" in p for p in entry_parts):
-                parts = entry_parts
-            else:
-                # Si no es string ni lista de dicts con text, se convierte a string y se pone en un dict
-                parts = [{"text": str(entry_parts)}]
-
-            current_conversation_history.append({
-                "role": entry["role"],
-                "parts": parts
-            })
-
-        current_conversation_history.append({
-            "role": "user",
-            "parts": [{"text": user_prompt}]
-        })
-
-        logger.debug(f"[LLM Handler] Últimos mensajes: {current_conversation_history[-2:]}")
+        full_conversation = chat_history + [{"role": "user", "parts": [{"text": user_prompt}]}]
+        
+        print(f"[LLM Handler] Enviando a Gemini (historial + prompt): {full_conversation}")
+        
+        response_text = None
+        tool_calls = []
+        finish_reason = None
 
         try:
-            response = await asyncio.wait_for(
-                self.model.generate_content_async(contents=current_conversation_history),
-                timeout=15
+            # Aquí es donde ocurre la llamada real al modelo de Gemini
+            response = await self.model.generate_content_async(
+                contents=full_conversation,
+                # No se requiere `tools` aquí si ya se pasó en el constructor del modelo
+                # Los `tool_config` pueden ser relevantes si necesitas un control más fino,
+                # pero para deshabilitar las tools, no pasarlas en el constructor es suficiente.
             )
+            
+            # --- Manejo de la respuesta del modelo ---
+            if response.candidates:
+                candidate = response.candidates[0]
+                if candidate.content:
+                    for part in candidate.content.parts:
+                        if part.text:
+                            response_text = part.text
+                        if part.function_call:
+                            # Aunque no esperamos tool_calls, las capturamos si aparecen.
+                            tool_calls.append({
+                                "name": part.function_call.name,
+                                "args": part.function_call.args
+                            })
+                if candidate.finish_reason:
+                    finish_reason = candidate.finish_reason.name # Convertir a string
+            
+            print(f"[LLM Handler] Respuesta de Gemini: Texto='{response_text}', Tools='{tool_calls}', FinishReason='{finish_reason}'")
 
-            candidate = response.candidates[0]
-
-            text_parts = []
-            if candidate.content and isinstance(candidate.content.parts, list):
-                for part in candidate.content.parts:
-                    # Accede a .text si el objeto part lo tiene
-                    if hasattr(part, 'text') and isinstance(part.text, str):
-                        text_parts.append(part.text)
-                    # Si el part es un diccionario (menos común directamente desde Gemini, pero por robustez)
-                    elif isinstance(part, dict) and "text" in part:
-                        text_parts.append(part["text"])
-
-            llm_response = {
-                "text": "".join(text_parts) if text_parts else None,
-                "tool_calls": [],
-                "finish_reason": str(candidate.finish_reason) if candidate.finish_reason else "UNKNOWN"
-            }
-
-            # Acceder a function_calls de forma segura
-            if hasattr(candidate, 'function_calls') and candidate.function_calls:
-                for fc in candidate.function_calls:
-                    llm_response["tool_calls"].append({
-                        "name": fc.name,
-                        "args": dict(fc.args) # Convertir a dict para asegurar serialización
-                    })
-
-            logger.info(
-                f"[LLM Handler] Respuesta: texto='{llm_response['text']}', "
-                f"tools={llm_response['tool_calls']}, "
-                f"finalización='{llm_response['finish_reason']}'"
-            )
-
-            return llm_response
-
-        except asyncio.TimeoutError:
-            logger.error("[LLM Handler] Tiempo de espera agotado en llamada a Gemini.")
             return {
-                "text": "La solicitud tomó demasiado tiempo.",
-                "tool_calls": [],
-                "finish_reason": "TIMEOUT"
+                "text": response_text,
+                "tool_calls": tool_calls,
+                "finish_reason": finish_reason
             }
 
         except Exception as e:
-            logger.error(f"[LLM Handler] Error al llamar a Gemini: {e}")
+            print(f"ERROR:app.services.llm_handler:[LLM Handler] Error al llamar a Gemini: {e}")
+            # Considerar la respuesta de error de `response.prompt_feedback` si está disponible
             error_message = "Lo siento, no pude procesar tu solicitud en este momento."
-            
-            # Manejo de errores específicos de Gemini
-            # Captura información de bloqueo si está disponible
-            if hasattr(e, 'response') and hasattr(e.response, 'prompt_feedback') and getattr(e.response.prompt_feedback, 'block_reason', None):
-                 error_message = (
-                    f"Tu solicitud fue bloqueada por el modelo. Razón: "
-                    f"{getattr(e.response.prompt_feedback, 'block_reason_message', None) or e.response.prompt_feedback.block_reason}"
-                )
-            # Captura el mensaje de error de la API si está disponible
-            elif hasattr(e, 'message') and isinstance(e.message, str):
-                error_message = f"Error del servicio de IA: {e.message}"
-            # Captura detalles adicionales del error si están disponibles
-            elif hasattr(e, 'details') and isinstance(e.details, str):
-                error_message = f"Error del servicio de IA: {e.details}"
-            # Mensaje genérico para otros errores no capturados
-            else:
-                error_message = f"Ocurrió un error inesperado al procesar tu solicitud: {str(e)}"
-
+            # Si el error es de la API, podemos intentar obtener más detalles
+            if hasattr(e, 'message'): # Para errores de google.api_core.exceptions
+                error_message += f" Detalle: {e.message}"
             return {
                 "text": error_message,
                 "tool_calls": [],
                 "finish_reason": "ERROR"
             }
 
-
-    async def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
-        if tool_name in self.tool_registry:
-            tool_instance = self.tool_registry[tool_name]
-            logger.info(f"[LLM Handler] Ejecutando tool: {tool_name} con args: {tool_args}")
+    async def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
+        # Este método no debería ser llamado si no hay tools configuradas,
+        # pero lo mantenemos para evitar errores si el flujo lo alcanza inesperadamente.
+        print(f"[LLM Handler] Ejecutando tool: {tool_name} con args: {tool_args}")
+        tool = self.tool_map.get(tool_name)
+        if tool:
             try:
-                result = await tool_instance.execute(**tool_args)
-                return result
+                result = await tool.run(**tool_args)
+                return json.dumps(result)
             except Exception as e:
-                logger.error(f"[LLM Handler] Error ejecutando la tool {tool_name}: {e}")
-                return json.dumps({"error": f"Error interno al ejecutar la tool '{tool_name}': {str(e)}"})
+                return json.dumps({"error": f"Error al ejecutar la herramienta {tool_name}: {e}"})
         else:
-            logger.warning(f"[LLM Handler] Tool '{tool_name}' no encontrada en el registro.")
-            return json.dumps({"error": f"Tool '{tool_name}' no reconocida."})
+            return json.dumps({"error": f"Herramienta '{tool_name}' no encontrada."})

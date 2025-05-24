@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # Base de datos de conversaciones (MySQL Asíncrona)
     CONVERSATION_DB_USER: str = os.getenv("CONVERSATION_DB_USER", "user")
     CONVERSATION_DB_PASSWORD: str = os.getenv("CONVERSATION_DB_PASSWORD", "password")
-    CONVERSATION_DB_HOST: str = os.getenv("CONVERSATION_DB_HOST", "localhost")
+    CONVERSATION_DB_HOST: str = os.getenv("CONVERSATION_DB_HOST", "db_conversation")
     CONVERSATION_DB_PORT: str = os.getenv("CONVERSATION_DB_PORT", "3306")
     CONVERSATION_DB_NAME: str = os.getenv("CONVERSATION_DB_NAME", "conversation_db")
     CONVERSATION_DB_URL: str = f"mysql+aiomysql://{CONVERSATION_DB_USER}:{CONVERSATION_DB_PASSWORD}@{CONVERSATION_DB_HOST}:{CONVERSATION_DB_PORT}/{CONVERSATION_DB_NAME}"
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Base de datos externa para MCP (MySQL Asíncrona)
     EXTERNAL_DB_USER: str = os.getenv("EXTERNAL_DB_USER", "ext_user")
     EXTERNAL_DB_PASSWORD: str = os.getenv("EXTERNAL_DB_PASSWORD", "ext_password")
-    EXTERNAL_DB_HOST: str = os.getenv("EXTERNAL_DB_HOST", "localhost")
+    EXTERNAL_DB_HOST: str = os.getenv("EXTERNAL_DB_HOST", "db_external")
     EXTERNAL_DB_PORT: str = os.getenv("EXTERNAL_DB_PORT", "3307") # Puerto diferente ejemplo
     EXTERNAL_DB_NAME: str = os.getenv("EXTERNAL_DB_NAME", "external_info_db")
     EXTERNAL_DB_URL: str = f"mysql+aiomysql://{EXTERNAL_DB_USER}:{EXTERNAL_DB_PASSWORD}@{EXTERNAL_DB_HOST}:{EXTERNAL_DB_PORT}/{EXTERNAL_DB_NAME}"

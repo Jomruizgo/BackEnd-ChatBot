@@ -20,7 +20,7 @@ google-generativeai
 
 # Para cargar variables de entorno desde .env
 python-dotenv
-
+cryptography
 # (Opcional, pero útil para IDs únicos)
 # python-ulid # Si decides usar ULIDs para session_id o IDs de mensaje
 
